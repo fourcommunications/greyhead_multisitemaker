@@ -1,0 +1,12 @@
+#
+# Apache/PHP settings:
+#
+
+# Don't show directory listings for URLs which map to a directory.
+Options -Indexes
+
+# Follow symbolic links in this directory.
+Options +SymLinksIfOwnerMatch
+
+# Set the default handler.
+DirectoryIndex index.php index.html index.htm

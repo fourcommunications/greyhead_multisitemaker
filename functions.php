@@ -436,16 +436,101 @@ function multisitemaker_get_multisite_form() {
 
   $form_elements[] = '<div class="col-sm-3 text-right"><button class="btn btn-md btn-primary" type="submit" id="submit" name="op">Create</button></div></div>';
 
-  // Add in advanced options.
-  $form_elements[] = '<div class="form-group form-inline clearfix"><div class="col-sm-9 advanced">
-      <label for="multisitesymlink">Advanced: include modules, themes and
-        libraries from a multisite directory:
-      </label>
+  // Check which install profile to use. If more than one, show options.
+  $install_profiles_to_use = array();
 
-      <input class="form-control" type="text" maxlength="100" id="multisitesymlink"
-      name="multisitesymlink" value="' .
-    multisitemaker_form_default_value('multisitesymlink') . '" />
-    </div></dvi>';
+  // Check for Four's Features.
+  if (is_dir('../features/four_communications_base_modules')) {
+    $install_profiles_to_use['fourprofile'] = 'Four Communications';
+  }
+
+  // Check for Greyhead's Features.
+  if (is_dir('../features/common_base_modules')) {
+    $install_profiles_to_use['greyheadprofile'] = 'Greyhead';
+  }
+
+  // Assemble the HTML for the profiles.
+  $install_profiles_elements = '';
+  if (count($install_profiles_to_use) == 1) {
+    // Exactly one profile available. Create a hidden field.
+    reset($install_profiles_to_use);
+    $install_profile_id = key($install_profiles_to_use);
+    $install_profiles_elements .= '<input type="hidden" name="profile" value="' . $install_profile_id . '" />';
+  }
+  elseif (count($install_profiles_to_use) > 1) {
+    $install_profiles_elements .= '
+      <div class="col-sm-12 advanced">
+        <div class="form-element">
+          <label for="profile">
+            Which install profile should we use? Select "Greyhead" if this Drupal
+            build contains the alexharries version of the drupal7_sites_common
+            repository; choose "Four" if you have the
+            fourcommunications/drupal7_sites_common repository.
+          </label>';
+
+    foreach ($install_profiles_to_use as $install_profile_id => $install_profile_name) {
+      $install_profiles_elements .= '<input type="radio" name="profile" value="' . $install_profile_id . '" id="profile-' . $install_profile_id . '" checked /> <label for="profile-' . $install_profile_id . '">' . $install_profile_name . '</label>';
+    }
+
+    $install_profiles_elements .= '
+        </div>
+      </div>';
+  }
+  else {
+    multisitemaker_message('<h3>Uh-oh</h3>
+      <p>I couldn\'t find either a Greyhead or Four profile directory, so the multisitemaker can\'t continue. Sad face.</p>', 'danger');
+
+    multisitemaker_exit();
+  }
+
+  // Add in advanced options.
+  $form_elements[] = '
+    <div class="form-group clearfix">
+      <div class="col-sm-12 advanced">
+        <div class="form-element">
+          <label for="multisitesymlink">Advanced: include modules, themes and
+            libraries from a multisite directory:
+          </label>
+
+          <input class="form-control" type="text" maxlength="100" id="multisitesymlink"
+          name="multisitesymlink" value="' .
+        multisitemaker_form_default_value('multisitesymlink') . '" />
+        </div>
+      </div>
+
+      <div class="col-sm-12 advanced">
+        <div class="form-element">
+          <label for="settingssiteurls">Advanced: also serve this site on the
+            following URLs:
+          </label>
+
+          <input class="form-control" type="text" maxlength="255" id="settingssiteurls"
+          name="settingssiteurls" value="' .
+        multisitemaker_form_default_value('settingssiteurls') . '" />
+
+          <div class="description">
+            <small>
+              <p>
+                Enter domain names without "http://", separated by commas,
+                for example "www.example.com,www.monkey.co.uk", etc.
+              </p>
+              <p>
+                You can use this, for example, if you want to point
+                www.myawesomewebsite.com to this server. You cannot use domain
+                names ending in <em>' . multisitemaker_get_root_domain_name() . '</em>
+              </p>
+
+              <p>
+                You should check with your line manager before directing
+                external web traffic to this server.
+              </p>
+            </small>
+          </div>
+        </div>
+      </div>
+
+    ' . $install_profiles_elements . '
+    </dvi>';
 
   // Add in the form protection fields.
   $form_elements[] = multisitemaker_get_form_validation_fields($form_id);
@@ -476,7 +561,7 @@ function multisitemaker_get_multisite_form() {
  * - Checks that a directory doesn't already exist in sites/ with the
  *    subdomain's name.
  *
- * - Creates the subdomain's directory in /sites.
+ * - Creates the subdomain's directory in /sites-projects.
  *
  * - Creates the database, user and password.
  *
@@ -494,21 +579,13 @@ function multisitemaker_process_new_multisite_form() {
     multisitemaker_exit('The subdomain name cannot be empty.');
   }
 
-  $multisitesymlink = check_plain(trim($_POST['multisitesymlink']));
-
-  if (!empty($multisitesymlink)) {
-    if (!(file_exists('../sites/' . $multisitesymlink) && is_dir('../sites/' . $multisitesymlink))) {
-      multisitemaker_exit('Sorry, the multisite directory name entered either doesn\'t exist or isn\'t accessible.');
-    }
-  }
-
   $domain_name = $subdomain_name . multisitemaker_get_root_domain_name();
   $domain_name_sanitised = multisitemaker_make_alphanumeric($domain_name);
   $new_database = $new_username = multisitemaker_make_alphanumeric($conf['database']['name_prefix'] . $domain_name_sanitised, 16, '');
   $password = substr(md5($domain_name_sanitised . ':' . $_SERVER['REQUEST_IP'] . ':' . REQUEST_TIME), 0, 20);
 
   // Check that the domain name directory doesn't already exist.
-  if (file_exists('../sites/' . $domain_name)) {
+  if (file_exists('../sites-projects/' . $domain_name)) {
     multisitemaker_message('<h3>Error</h3>
       <p>A multisite with the domain name ' . $subdomain_name . ' already exists.</p>', 'danger');
 
@@ -516,17 +593,31 @@ function multisitemaker_process_new_multisite_form() {
   }
 
   // Try to create the directory.
-  if (!mkdir('../sites/' . $domain_name, 0777)) {
+  @mkdir('../sites-projects');
+
+  if (!mkdir('../sites-projects/' . $domain_name, 0777)) {
     multisitemaker_message('<h3>Error</h3>
       <p>Unable to create the directory sites/' . $domain_name . '; does this script have write permissions on the sites/ directory?</p>', 'danger');
 
     multisitemaker_exit();
   }
 
+  // multisitesymlink
+  $multisitesymlink = check_plain(trim($_POST['multisitesymlink']));
+
+  if (!empty($multisitesymlink)) {
+    if (!(file_exists('../sites-projects/' . $multisitesymlink) && is_dir('../sites-projects/' . $multisitesymlink))) {
+      multisitemaker_exit('Sorry, the multisite directory name entered either doesn\'t exist or isn\'t accessible.');
+    }
+
+    // Symlink into the sites-common directory.
+    symlink('../sites-projects/' . $multisitesymlink, '../sites-common/' . $multisitesymlink);
+  }
+
   // Create symlinks now, if required.
   if (!empty($multisitesymlink)) {
-    $destination_root = '../sites/' . $multisitesymlink . '/';
-    $source_root = '../sites/' . $domain_name . '/';
+    $destination_root = '../sites-projects/' . $multisitesymlink . '/';
+    $source_root = '../sites-projects/' . $domain_name . '/';
 
     $symlinks_to_create = array(
       'modules',
@@ -539,6 +630,46 @@ function multisitemaker_process_new_multisite_form() {
         symlink('../' . $multisitesymlink . '/' . $symlink_to_create, $source_root . $symlink_to_create);
       }
     }
+  }
+
+  // settingssiteurls
+  $settingssiteurls = (array)explode(',', check_plain(trim($_POST['settingssiteurls'])));
+
+  if (!empty($settingssiteurls)) {
+    $siteurls_file_contents = '';
+
+    foreach ($settingssiteurls as $row => &$settingssiteurl) {
+      $settingssiteurl = trim($settingssiteurl);
+
+      // Remove any URLs which end in multisitemaker_get_root_domain_name().
+      if (substr($settingssiteurl, 0 - strlen(multisitemaker_get_root_domain_name())) == multisitemaker_get_root_domain_name()) {
+        multisitemaker_message('<h3>Error</h3>
+          <p>You cannot specify that this multisite should be shown on URLs ending in <em>' . multisitemaker_get_root_domain_name() . '</em>. Sorry about that.</p>', 'danger');
+
+        multisitemaker_exit();
+      }
+
+      $siteurls_file_contents .= 'SETTINGS_SITE_URLS[] = ' . $settingssiteurl . "\r\n";
+    }
+
+    // Now create the file.
+    $siteurls_file_path_root = '../sites-projects/' . $domain_name . '/settings.site_urls.info';
+
+    $siteurls_file = fopen($siteurls_file_path_root, "w") or die("Unable to create file at $siteurls_file_path_root.");
+    fwrite($siteurls_file, $siteurls_file_contents);
+    fclose($siteurls_file);
+  }
+
+  //profile
+  $profile = check_plain(trim($_POST['profile']));
+
+  // Make sure $profile is a directory in the profiles directory;
+  // otherwise, die. Remember our script location is /multisite-maker
+  if (!is_dir('../core/profiles/' . $profile)) {
+    multisitemaker_message('<h3>Error</h3>
+      <p>The specified install profile <em>"' . $profile . '"</em> isn\'t valid, or its directory wasn\'t found at <em>"../core/profiles/' . $profile . '"</em> in the multisite maker. Please try a different profile.</p>', 'danger');
+
+    multisitemaker_exit();
   }
 
   // Create the database and user, and set permissions.
@@ -557,6 +688,7 @@ function multisitemaker_process_new_multisite_form() {
     $redirect_url = multisitemaker_get_protocol() . '://' . $domain_name . '/multisitemaker/?';
     $redirect_options = array(
       'q=redirecttodrupal',
+      'profile=' . $profile,
       'new_database=' . $options['new_database'],
       'new_username=' . $options['new_username'],
       'new_password=' . $options['new_password'],
@@ -666,7 +798,7 @@ function multisitemaker_redirecttodrupal() {
   $redirect_url = multisitemaker_get_protocol() . '://' . $_SERVER['HTTP_HOST'] . '/install.php?';
 
   $redirect_options = array(
-    'profile=greyhead',
+    'profile=' . $_GET['profile'],
     'locale=en',
     'new_database=' . $_GET['new_database'],
     'new_username=' . $_GET['new_username'],

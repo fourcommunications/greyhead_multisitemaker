@@ -9,7 +9,7 @@
 
     <!-- Bootstrap -->
     <style type="text/css" media="all">
-      @import url("/sites/all/themes/fourcommunications_bootstrap/css/subtheme-styles.css");
+      @import url("/sites/all/themes/greyhead_bootstrap/css/subtheme-styles.css");
     </style>
 
     <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
